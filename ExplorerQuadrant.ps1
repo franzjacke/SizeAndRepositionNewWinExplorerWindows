@@ -4,7 +4,11 @@
     Positions each new File Explorer window in a rotating 6-quadrant layout.
 
 .DESCRIPTION
-    Screen: 3440x1440  |  Window: 1/6 screen (1147x720)
+    Detects the usable work area (screen minus taskbar) at runtime via
+    SystemParametersInfo SPI_GETWORKAREA, so window positions are always
+    correct regardless of taskbar size or docking edge.
+
+    Window size = 1/6 of the work area (3 columns x 2 rows).
     Quadrant order: Left-Top → Left-Bottom → Middle-Top → Middle-Bottom → Right-Top → Right-Bottom → (repeat)
 
     Polls Shell.Application COM every 500ms for new Explorer windows.
@@ -38,25 +42,38 @@ public class ExplorerQuadrantWin32 {
     // not DPI-scaled logical pixels (fixes wrong size/position on scaled displays).
     [DllImport("user32.dll")]
     public static extern bool SetProcessDPIAware();
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct RECT { public int Left, Top, Right, Bottom; }
+
+    // SPI_GETWORKAREA (0x30): returns usable screen area excluding taskbars.
+    [DllImport("user32.dll")]
+    public static extern bool SystemParametersInfo(uint uiAction, uint uiParam, ref RECT pvParam, uint fWinIni);
 }
 "@
 
 [ExplorerQuadrantWin32]::SetProcessDPIAware() | Out-Null
 
-# ── Layout constants ──────────────────────────────────────────────────────────
-$SCREEN_W  = 3440
-$SCREEN_H  = 1440
-$WIN_W     = [int]($SCREEN_W / 3)   # 1146
-$WIN_H     = [int]($SCREEN_H / 2)   #  720
+# ── Work area (screen minus taskbar, in physical pixels) ──────────────────────
+$wa = New-Object ExplorerQuadrantWin32+RECT
+[ExplorerQuadrantWin32]::SystemParametersInfo(0x30, 0, [ref]$wa, 0) | Out-Null
 
-# Quadrant sequence: 3 columns × 2 rows
+$WORK_X = $wa.Left
+$WORK_Y = $wa.Top
+$WORK_W = $wa.Right  - $wa.Left
+$WORK_H = $wa.Bottom - $wa.Top
+
+$WIN_W  = [int]($WORK_W / 3)
+$WIN_H  = [int]($WORK_H / 2)
+
+# Quadrant sequence: 3 columns × 2 rows, origin at work-area top-left
 $QUADRANTS = @(
-    [PSCustomObject]@{ Name = 'Left-Top';      X = 0;           Y = 0       }
-    [PSCustomObject]@{ Name = 'Left-Bottom';   X = 0;           Y = $WIN_H  }
-    [PSCustomObject]@{ Name = 'Middle-Top';    X = $WIN_W;      Y = 0       }
-    [PSCustomObject]@{ Name = 'Middle-Bottom'; X = $WIN_W;      Y = $WIN_H  }
-    [PSCustomObject]@{ Name = 'Right-Top';     X = $WIN_W * 2;  Y = 0       }
-    [PSCustomObject]@{ Name = 'Right-Bottom';  X = $WIN_W * 2;  Y = $WIN_H  }
+    [PSCustomObject]@{ Name = 'Left-Top';      X = $WORK_X;              Y = $WORK_Y           }
+    [PSCustomObject]@{ Name = 'Left-Bottom';   X = $WORK_X;              Y = $WORK_Y + $WIN_H  }
+    [PSCustomObject]@{ Name = 'Middle-Top';    X = $WORK_X + $WIN_W;     Y = $WORK_Y           }
+    [PSCustomObject]@{ Name = 'Middle-Bottom'; X = $WORK_X + $WIN_W;     Y = $WORK_Y + $WIN_H  }
+    [PSCustomObject]@{ Name = 'Right-Top';     X = $WORK_X + $WIN_W * 2; Y = $WORK_Y           }
+    [PSCustomObject]@{ Name = 'Right-Bottom';  X = $WORK_X + $WIN_W * 2; Y = $WORK_Y + $WIN_H  }
 )
 
 # ── State ─────────────────────────────────────────────────────────────────────
@@ -97,6 +114,7 @@ $index = Get-QuadrantIndex
 if ($Reset) { Save-QuadrantIndex 0; $index = 0 }
 
 Write-Host "ExplorerQuadrant monitor started"
+Write-Host "  Work area   : ${WORK_W} x ${WORK_H} at ($WORK_X, $WORK_Y)  [taskbar excluded]"
 Write-Host "  Window size : ${WIN_W} x ${WIN_H}"
 Write-Host "  Next slot   : $($QUADRANTS[$index].Name)"
 Write-Host "  State file  : $STATE_FILE"
