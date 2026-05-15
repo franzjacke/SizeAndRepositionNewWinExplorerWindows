@@ -1,0 +1,118 @@
+==============================================================================
+  SizeAndRepositionNewWinExplorerWindows
+  Automatically size & rotate File Explorer windows across 6 screen quadrants
+==============================================================================
+
+OVERVIEW
+--------
+Every time you open a new File Explorer window it will automatically be:
+  - Resized to 1/6 of your 3440x1440 screen  (1146 x 720 pixels)
+  - Placed in the next quadrant in this rotating sequence:
+
+    1. Left-Top      (    0,   0)
+    2. Left-Bottom   (    0, 720)
+    3. Middle-Top    ( 1146,   0)
+    4. Middle-Bottom ( 1146, 720)
+    5. Right-Top     ( 2293,   0)
+    6. Right-Bottom  ( 2293, 720)
+    → then back to 1. Left-Top, and so on.
+
+  Layout on screen (3440 x 1440):
+  ┌───────────┬───────────┬───────────┐
+  │  1 L-Top  │  3 M-Top  │  5 R-Top  │
+  ├───────────┼───────────┼───────────┤
+  │  2 L-Bot  │  4 M-Bot  │  6 R-Bot  │
+  └───────────┴───────────┴───────────┘
+
+The current quadrant index is saved between sessions in:
+  %APPDATA%\ExplorerQuadrantState.txt
+
+
+REQUIREMENTS
+------------
+  - Windows 10 / 11
+  - PowerShell 5.1 or later (included in Windows 10/11)
+  - Screen resolution: 3440 x 1440
+    (Edit the $SCREEN_W / $SCREEN_H constants in ExplorerQuadrant.ps1
+     to adapt to any other resolution.)
+
+
+FILES
+-----
+  ExplorerQuadrant.ps1   — Background monitor script (the main engine)
+  Install-Startup.ps1    — Registers the monitor as a Windows logon task
+  instructions.txt       — This file
+
+
+FIRST-TIME SETUP  (one-time, run as Administrator)
+---------------------------------------------------
+1. Open PowerShell as Administrator.
+
+2. Navigate to the folder containing the scripts:
+     cd "D:\007_Repository\WinExplorerSizePosition"
+   (adjust the path to wherever you cloned / saved this repo)
+
+3. Install the scheduled task:
+     powershell -ExecutionPolicy Bypass -File .\Install-Startup.ps1
+
+4. Start the monitor immediately (no reboot required):
+     Start-ScheduledTask -TaskName ExplorerQuadrantMonitor
+
+5. Open a new File Explorer window (Win+E) and watch it snap into place.
+
+
+RUNNING WITHOUT INSTALLING  (manual / test mode)
+-------------------------------------------------
+Open a PowerShell window and run:
+  powershell -ExecutionPolicy Bypass -File .\ExplorerQuadrant.ps1
+
+The monitor runs in the foreground. Press Ctrl+C to stop it.
+
+
+OPTIONAL FLAGS
+--------------
+  -Reset   Resets the quadrant counter back to 1. Left-Top before starting.
+
+  Example:
+    powershell -ExecutionPolicy Bypass -File .\ExplorerQuadrant.ps1 -Reset
+
+
+UNINSTALLING
+------------
+  powershell -ExecutionPolicy Bypass -File .\Install-Startup.ps1 -Uninstall
+
+This removes the scheduled task. Delete the folder afterwards if desired.
+The state file at %APPDATA%\ExplorerQuadrantState.txt can also be deleted.
+
+
+ADAPTING TO A DIFFERENT RESOLUTION
+-----------------------------------
+Open ExplorerQuadrant.ps1 in any text editor and change these two lines
+near the top of the script:
+
+  $SCREEN_W  = 3440
+  $SCREEN_H  = 1440
+
+Save and restart the monitor.  The window size and all six positions are
+calculated automatically from those values.
+
+
+TROUBLESHOOTING
+---------------
+  Q: The window doesn't move.
+  A: Make sure the scheduled task is running:
+       Get-ScheduledTask -TaskName ExplorerQuadrantMonitor | Select-Object State
+     It should show "Running". If not, start it:
+       Start-ScheduledTask -TaskName ExplorerQuadrantMonitor
+
+  Q: I get an execution policy error.
+  A: Run the install command with -ExecutionPolicy Bypass as shown above,
+     or set the policy for the current user:
+       Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+
+  Q: I want to restart the sequence from Left-Top.
+  A: Either delete %APPDATA%\ExplorerQuadrantState.txt, or run:
+       powershell -ExecutionPolicy Bypass -File .\ExplorerQuadrant.ps1 -Reset
+
+
+==============================================================================
