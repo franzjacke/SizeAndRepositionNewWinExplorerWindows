@@ -33,8 +33,15 @@ public class ExplorerQuadrantWin32 {
 
     [DllImport("user32.dll")]
     public static extern bool IsWindow(IntPtr hWnd);
+
+    // Mark this process DPI-aware so MoveWindow coordinates are physical pixels,
+    // not DPI-scaled logical pixels (fixes wrong size/position on scaled displays).
+    [DllImport("user32.dll")]
+    public static extern bool SetProcessDPIAware();
 }
 "@
+
+[ExplorerQuadrantWin32]::SetProcessDPIAware() | Out-Null
 
 # ── Layout constants ──────────────────────────────────────────────────────────
 $SCREEN_W  = 3440
