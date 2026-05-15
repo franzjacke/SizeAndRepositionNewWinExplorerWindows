@@ -22,7 +22,7 @@ param(
 )
 
 Set-StrictMode -Version Latest
-$ErrorActionPreference = 'Stop'
+$ErrorActionPreference = 'Continue'
 
 # ── Win32 API ────────────────────────────────────────────────────────────────
 Add-Type @"
@@ -96,7 +96,7 @@ function Get-ExplorerWindows {
     try {
         $shell = New-Object -ComObject Shell.Application
         return @($shell.Windows() | Where-Object {
-            try { $_.Name -match 'Explorer|File Explorer' } catch { $false }
+            try { $_.HWND -and $_.Name -match 'Explorer|File Explorer' } catch { $false }
         })
     } catch { return @() }
 }
@@ -125,34 +125,39 @@ $knownHandles = @{}
 Get-ExplorerWindows | ForEach-Object { $knownHandles[[IntPtr]$_.HWND] = $true }
 
 while ($true) {
-    $currentHandles = @{}
+    try {
+        $currentHandles = @{}
 
-    Get-ExplorerWindows | ForEach-Object {
-        $hwnd = [IntPtr]$_.HWND
-        $currentHandles[$hwnd] = $true
+        Get-ExplorerWindows | ForEach-Object {
+            $rawHwnd = $_.HWND
+            if ($null -eq $rawHwnd) { return }
+            $hwnd = [IntPtr][int64]$rawHwnd
+            $currentHandles[$hwnd] = $true
 
-        if (-not $knownHandles.ContainsKey($hwnd)) {
-            # New Explorer window — give it a moment to finish drawing
-            Start-Sleep -Milliseconds 400
+            if (-not $knownHandles.ContainsKey($hwnd)) {
+                # New Explorer window — give it a moment to finish drawing
+                Start-Sleep -Milliseconds 400
 
-            if ([ExplorerQuadrantWin32]::IsWindow($hwnd)) {
-                $q   = $QUADRANTS[$index]
-                $ok  = Set-WindowPosition $hwnd $q
+                if ([ExplorerQuadrantWin32]::IsWindow($hwnd)) {
+                    $q      = $QUADRANTS[$index]
+                    $ok     = Set-WindowPosition $hwnd $q
+                    $status = if ($ok) { 'OK' } else { 'FAILED' }
+                    Write-Host ("[{0}]  HWND={1}  Slot={2}  Pos=({3},{4})  [{5}]" -f
+                        (Get-Date -Format 'HH:mm:ss'), $hwnd, $q.Name, $q.X, $q.Y, $status)
 
-                $status = if ($ok) { 'OK' } else { 'FAILED' }
-                Write-Host ("[{0}]  HWND={1}  Slot={2}  Pos=({3},{4})  [{5}]" -f
-                    (Get-Date -Format 'HH:mm:ss'), $hwnd, $q.Name, $q.X, $q.Y, $status)
+                    $index = ($index + 1) % $QUADRANTS.Count
+                    Save-QuadrantIndex $index
+                }
 
-                $index = ($index + 1) % $QUADRANTS.Count
-                Save-QuadrantIndex $index
+                $knownHandles[$hwnd] = $true
             }
-
-            $knownHandles[$hwnd] = $true
         }
-    }
 
-    # Prune closed windows so new windows at the same HWND are treated as new
-    $knownHandles = $currentHandles
+        # Prune closed windows so recycled HWNDs are treated as new next time
+        $knownHandles = $currentHandles
+    } catch {
+        Write-Host ("[{0}]  WARNING: {1}" -f (Get-Date -Format 'HH:mm:ss'), $_.Exception.Message)
+    }
 
     Start-Sleep -Milliseconds 500
 }
