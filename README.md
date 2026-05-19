@@ -11,6 +11,7 @@ Every time you open a new File Explorer window it will automatically be:
     → then back to 1. Left-Top, and so on.
 
   Layout on screen (3440 x 1440):
+  
   ┌───────────┬───────────┬───────────┐
   │  1 L-Top  │  3 M-Top  │  5 R-Top  │
   ├───────────┼───────────┼───────────┤
